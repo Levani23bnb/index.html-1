@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="ka">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ARC Donation dApp</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #121212;
+            color: #ffffff;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+        .container {
+            background-color: #1e1e1e;
+            padding: 2rem;
+            border-radius: 15px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+            width: 400px;
+            text-align: center;
+        }
+        h1 { margin-bottom: 1.5rem; color: #00ff88; }
+        
+        input, textarea {
+            width: 100%;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+            border: 1px solid #333;
+            background-color: #2c2c2c;
+            color: #fff;
+            box-sizing: border-box;
+        }
+        
+        button {
+            width: 100%;
+            padding: 12px;
+            margin-top: 10px;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: 0.3s;
+        }
+
+        .btn-connect { background-color: #3b82f6; color: white; }
+        .btn-connect:hover { background-color: #2563eb; }
+
+        .btn-donate { background-color: #00ff88; color: black; }
+        .btn-donate:hover { background-color: #00cc6a; }
+        .btn-donate:disabled { background-color: #555; cursor: not-allowed; }
+
+        .status { margin-top: 15px; font-size: 0.9em; color: #aaa; word-break: break-all; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>🚀 ARC Donation</h1>
+    
+    <!-- დაკავშირების ღილაკი -->
+    <button id="connectBtn" class="btn-connect" onclick="connectWallet()">Connect Wallet</button>
+    <p id="walletAddress" style="font-size: 0.8em; color: #888; margin-bottom: 20px;"></p>
+
+    <!-- დონაციის ფორმა -->
+    <div id="donationForm" style="display: none;">
+        <input type="number" id="amount" placeholder="თანხა (ETH/ARC)" step="0.0001">
+        <textarea id="message" placeholder="დატოვე მესიჯი..." rows="3"></textarea>
+        <button id="donateBtn" class="btn-donate" onclick="donate()">Donate 💸</button>
+    </div>
+
+    <div id="status" class="status"></div>
+</div>
+
+<!-- Ethers.js ბიბლიოთეკის შემოტანა პირდაპირ CDN-დან -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.7.0/ethers.umd.min.js"></script>
+
+<script>
+    // --- კონფიგურაცია ---
+    // აქ ჩაწერე შენი დადეპლოიებული კონტრაქტის მისამართი!
+    const CONTRACT_ADDRESS = "0xA82111a064A398601D83b669Eef497fEc1630e62"; 
+    
+    // კონტრაქტის ABI (მხოლოდ ის ფუნქცია რაც გვჭირდება)
+    const ABI = [
+        "function donate(string memory message) external payable"
+    ];
+
+    let provider;
+    let signer;
+    let contract;
+
+    async function connectWallet() {
+        const statusEl = document.getElementById("status");
+        
+        if (typeof window.ethereum !== "undefined") {
+            try {
+                // მოთხოვნა მეტამასკთან დაკავშირებაზე
+                await window.ethereum.request({ method: "eth_requestAccounts" });
+                
+                // Ethers პროვაიდერის შექმნა
+                provider = new ethers.BrowserProvider(window.ethereum);
+                signer = await provider.getSigner();
+                const address = await signer.getAddress();
+
+                // ინტერფეისის განახლება
+                document.getElementById("connectBtn").innerText = "Connected";
+                document.getElementById("connectBtn").style.backgroundColor = "#22c55e";
+                document.getElementById("walletAddress").innerText = address;
+                document.getElementById("donationForm").style.display = "block";
+                
+                // კონტრაქტის ინიციალიზაცია
+                contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, signer);
+                
+                statusEl.innerText = "საფულე დაკავშირებულია!";
+                statusEl.style.color = "#22c55e";
+
+            } catch (error) {
+                console.error(error);
+                statusEl.innerText = "შეცდომა დაკავშირებისას!";
+            }
+        } else {
+            statusEl.innerText = "გთხოვთ დააყენოთ Metamask!";
+        }
+    }
+
+    async function donate() {
+        const amountVal = document.getElementById("amount").value;
+        const msgVal = document.getElementById("message").value;
+        const statusEl = document.getElementById("status");
+        const btn = document.getElementById("donateBtn");
+
+        if (!amountVal || !msgVal) {
+            alert("შეიყვანეთ თანხა და მესიჯი!");
+            return;
+        }
+
+        try {
+            btn.disabled = true;
+            btn.innerText = "Processing...";
+            statusEl.innerText = "ტრანზაქცია იგზავნება...";
+
+            // თანხის გადაყვანა Wei-ში
+            const amountWei = ethers.parseEther(amountVal);
+
+            // ფუნქციის გამოძახება
+            const tx = await contract.donate(msgVal, { value: amountWei });
+            
+            statusEl.innerText = "Wait for confirmation...";
+            
+            // დალოდება დადასტურებას
+            await tx.wait();
+
+            statusEl.innerText = "✅ დონაცია გაიგზავნა! მადლობა.";
+            statusEl.style.color = "#00ff88";
+            
+            // ველების გასუფთავება
+            document.getElementById("amount").value = "";
+            document.getElementById("message").value = "";
+
+        } catch (error) {
+            console.error(error);
+            statusEl.innerText = "❌ ტრანზაქცია ჩაიშალა: " + (error.reason || error.message);
+            statusEl.style.color = "red";
+        } finally {
+            btn.disabled = false;
+            btn.innerText = "Donate 💸";
+        }
+    }
+</script>
+
+</body>
+</html>
